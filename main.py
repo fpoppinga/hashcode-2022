@@ -1,20 +1,7 @@
-from dataclasses import dataclass
-from typing import Iterable, List, Set
+from typing import Iterable
 
-
-@dataclass
-class Client:
-    id: int
-    likes: Set[str]
-    dislikes: Set[str]
-
-
-@dataclass
-class Pizza:
-    ingredients: Set[str]
-
-    def to_string(self) -> str:
-        return f"{len(self.ingredients)} {' '.join(self.ingredients)}"
+from solver import solve
+from pizza_types import Pizza, Client
 
 
 def read_input(problem: str) -> Iterable[Client]:
@@ -56,6 +43,6 @@ if __name__ == "__main__":
         "e_elaborate",
     ]:
         clients = list(read_input(problem))
-        solution_pizza = Pizza({"cheese", "basil", "peppers"})
+        solution_pizza = solve(clients)
         print(f"{problem}: {score(clients, solution_pizza)}")
         write_output(problem, solution_pizza)
