@@ -36,10 +36,10 @@ def score(clients: Iterable[Client], pizza: Pizza) -> int:
 
 if __name__ == "__main__":
     for problem in [
-        "a_an_example",
-        "b_basic",
-        "c_coarse",
-        "d_difficult",
+        # "a_an_example",
+        # "b_basic",
+        # "c_coarse",
+        # "d_difficult",
         "e_elaborate",
     ]:
         clients = list(read_input(problem))

@@ -1,71 +1,67 @@
 from __future__ import annotations
-from ctypes import Union
-import random
-from typing import List, Set
-from xmlrpc.client import boolean
+from ortools.sat.python import cp_model
+
+from typing import Iterable, List, Set
 
 from pizza_types import Pizza, Client
 
 
-class Group:
-    clients: List[Client]
-    likes: Set[str]
-    dislikes: Set[str]
-
-    def __init__(self) -> None:
-        self.clients = []
-        self.likes = set()
-        self.dislikes = set()
-
-    def add(self, other):
-        self.clients.append(other)
-        self.likes = self.likes.union(other.likes)
-        self.dislikes = self.dislikes.union(other.dislikes)
-
-    def is_compatible(self, other) -> bool:
-        return other.dislikes.isdisjoint(self.likes) and other.likes.isdisjoint(
-            self.dislikes
-        )
-
-    def split_compatible(self, client: Client) -> Group:
-        new_group = Group()
-        new_group.add(client)
-        for existing_client in self.clients:
-            if new_group.is_compatible(existing_client):
-                new_group.add(existing_client)
-
-        return new_group
-
-
-NUM_SEEDS = 100
-DRAW_MULTIPLIER = 100
-SUPER_GROUP_ROUNDS = 10
-
-
 def solve(clients: List[Client]) -> Pizza:
-    seeds: List[Client] = random.sample(clients, k=min(NUM_SEEDS, len(clients)))
+    """Solve assignment problem for given group of workers."""
+    all_ingredients: Set[str] = set()
+    for client in clients:
+        all_ingredients = all_ingredients.union(client.likes)
+        all_ingredients = all_ingredients.union(client.dislikes)
 
-    num_draws = int(DRAW_MULTIPLIER * len(clients) / NUM_SEEDS)
-    groups = create_groups(
-        random.choices(clients, k=min(num_draws, len(clients))), seeds
-    )
+    # Data
+    all_ingredients = list(all_ingredients)
+    num_ingredients = len(all_ingredients)
+    num_clients = len(clients)
 
-    super_groups = groups
-    for i in range(SUPER_GROUP_ROUNDS):
-        super_groups = create_groups(super_groups, super_groups)
+    # Solver
+    # Create the mip solver with the SCIP backend.
+    model = cp_model.CpModel()
 
-    best_group = max(super_groups, key=lambda g: len(g.clients))
-    return Pizza(best_group.likes)
+    # Variables
+    # x[i] is a 0-1 variable, which will be 1
+    # if ingredient i is on the pizza
+    x = []
+    x_inv = []
+    for i in range(num_ingredients):
+        x.append(model.NewBoolVar(all_ingredients[i]))
+        x_inv.append(model.NewBoolVar("inv_" + all_ingredients[i]))
 
+    satisfy_client = []
+    for j in range(num_clients):
+        satisfy_client.append(model.NewBoolVar(f"client_{j}"))
 
-def create_groups(clients, seeds):
-    groups: List[Group] = []
-    for seed in seeds:
-        group = Group()
-        group.add(seed)
-        for client in clients:
-            if group.is_compatible(client):
-                group.add(client)
+    # Constraints
+    for i in range(num_ingredients):
+        model.AddBoolXOr([x[i], x_inv[i]])
 
-        groups.append(group)
-    return groups
+    for j, client in enumerate(clients):
+        variables = []
+        for i, ingredient in enumerate(all_ingredients):
+            if ingredient in client.likes:
+                variables.append(x[i])
+            if ingredient in client.dislikes:
+                variables.append(x_inv[i])
+        model.AddBoolAnd(variables).OnlyEnforceIf(satisfy_client[j])
+
+    # Objective
+    model.Maximize(sum(satisfy_client))
+
+    # Solve
+    solver = cp_model.CpSolver()
+    status = solver.Solve(model, solution_callback=cp_model.ObjectiveSolutionPrinter())
+
+    # Print solution.
+    pizza_ingredients: Set[str] = set()
+    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+        print(f"Solution is {'optimal' if status == cp_model.OPTIMAL else 'feasible'}")
+        print("Score = ", solver.ObjectiveValue(), "\n")
+        for i in range(num_ingredients):
+            if solver.Value(x[i]) == 1:
+                pizza_ingredients.add(all_ingredients[i])
+
+    return Pizza(pizza_ingredients)
